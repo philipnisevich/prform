@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Mic, Loader2, ArrowRight, RotateCcw } from "lucide-react";
 import { SOURCE_META, type SourceId } from "@/lib/sources";
@@ -86,6 +86,11 @@ interface ChatTurn {
 
 interface PacketDemoProps {
   variant?: "compact" | "full";
+  // Fires once, whenever the thread transitions between the initial
+  // prompt-and-suggestions view and an in-progress conversation — lets a
+  // parent page (e.g. /demo) hide its own title/description once chatting
+  // starts, without PacketDemo knowing anything about that page's layout.
+  onModeChange?: (chatMode: boolean) => void;
 }
 
 const FALLBACK_SUGGESTIONS = [
@@ -102,6 +107,54 @@ function historyAnswerText(r: ApiResult): string {
   return r.message;
 }
 
+const TYPE_MS = 42;
+const DELETE_MS = 20;
+const HOLD_MS = 1500;
+const GAP_MS = 350;
+
+// Cycles the placeholder through example prompts (typed, held, deleted) so
+// they read as inspiration rather than buttons — no click target, no extra
+// chrome, just what to try next.
+function useTypewriterPlaceholder(phrases: string[], enabled: boolean): string {
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    // No cleanup-to-blank needed when disabled: the PromptBar this feeds
+    // either isn't rendered (chat has started) or has a non-empty value
+    // (browsers hide the placeholder anyway), so a stale typed string just
+    // sits unseen in state until this re-enables.
+    if (!enabled || phrases.length === 0) return;
+    let phraseIndex = 0;
+    let charIndex = 0;
+    let deleting = false;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    const tick = () => {
+      const phrase = phrases[phraseIndex % phrases.length];
+      if (!deleting) {
+        charIndex += 1;
+        setText(phrase.slice(0, charIndex));
+        timeout = setTimeout(tick, charIndex === phrase.length ? HOLD_MS : TYPE_MS);
+        if (charIndex === phrase.length) deleting = true;
+      } else {
+        charIndex -= 1;
+        setText(phrase.slice(0, charIndex));
+        if (charIndex === 0) {
+          deleting = false;
+          phraseIndex += 1;
+          timeout = setTimeout(tick, GAP_MS);
+        } else {
+          timeout = setTimeout(tick, DELETE_MS);
+        }
+      }
+    };
+    timeout = setTimeout(tick, GAP_MS);
+    return () => clearTimeout(timeout);
+  }, [enabled, phrases]);
+
+  return text;
+}
+
 // Minimal shape of the Web Speech API — not in the default TS lib, and only
 // a subset is used here (start/stop plus the one result we read).
 interface SpeechRecognitionLike extends EventTarget {
@@ -115,7 +168,7 @@ interface SpeechRecognitionLike extends EventTarget {
   stop: () => void;
 }
 
-export function PacketDemo({ variant = "full" }: PacketDemoProps) {
+export function PacketDemo({ variant = "full", onModeChange }: PacketDemoProps) {
   const [prompt, setPrompt] = useState("");
   const [listening, setListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
@@ -252,6 +305,16 @@ export function PacketDemo({ variant = "full" }: PacketDemoProps) {
   const chatMode = messages.length > 0;
   const lastIndex = messages.length - 1;
 
+  useEffect(() => {
+    onModeChange?.(chatMode);
+    // onModeChange is a caller-supplied callback, not reactive state this
+    // component reads from — only re-fire on an actual chatMode flip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatMode]);
+
+  const placeholderPhrases = useMemo(() => [...suggestions, CURVEBALL], [suggestions]);
+  const typedPlaceholder = useTypewriterPlaceholder(placeholderPhrases, !chatMode && prompt.length === 0);
+
   return (
     <div className="mx-auto w-full max-w-2xl">
       {!chatMode && (
@@ -264,29 +327,9 @@ export function PacketDemo({ variant = "full" }: PacketDemoProps) {
             toggleMic={toggleMic}
             showMic={variant === "full"}
             loading={loading}
+            placeholder={typedPlaceholder}
           />
           {micError && <p className="mt-2 text-center text-xs text-danger">{micError}</p>}
-
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => run(s)}
-                className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted transition hover:text-text"
-              >
-                {s}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => run(CURVEBALL)}
-              className="rounded-full border border-dashed border-danger/50 bg-danger/5 px-3 py-1.5 text-xs text-danger transition hover:bg-danger/10"
-              title="Try to break it — this one's out of scope on purpose"
-            >
-              {CURVEBALL}
-            </button>
-          </div>
         </>
       )}
 
