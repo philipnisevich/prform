@@ -43,6 +43,7 @@ interface PacketResponse {
   ingestedCount: number;
   noiseDropped: number;
   usedModel: boolean;
+  lead: string | null;
   sections: Section[];
   context: ChatContext;
 }
@@ -102,7 +103,7 @@ const CURVEBALL = "Who's my worst engineer?";
 const firstName = (name: string) => name.split(" ")[0];
 
 function historyAnswerText(r: ApiResult): string {
-  if (r.kind === "packet") return r.sections.map((s) => s.sentence).join(" ");
+  if (r.kind === "packet") return r.lead ?? r.sections.map((s) => s.sentence).join(" ");
   if (r.kind === "answer") return r.answer;
   return r.message;
 }
@@ -558,23 +559,29 @@ function ResponseCard({ result }: { result: ApiResult }) {
   }
 
   return (
-    <div className="w-full rounded-xl border border-border bg-surface p-5 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.2)] sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
-        <div>
-          <p className="text-[15px] font-medium text-text">{result.person}</p>
-          <p className="text-[11px] text-muted">
-            {result.windowLabel} · {result.ingestedCount} events seen, {result.noiseDropped} dropped as noise
-          </p>
+    <div className="space-y-3">
+      {result.lead && (
+        <div className="max-w-[92%] rounded-2xl rounded-tl-md border border-border bg-surface px-4 py-3 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.2)]">
+          <p className="text-[13px] leading-relaxed text-text">{result.lead}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <SourceBadge live={result.live} />
-          <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted uppercase">
-            {result.usedModel ? "Model-drafted" : "Template-drafted"}
-          </span>
+      )}
+      <div className="w-full rounded-xl border border-border bg-surface p-5 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.2)] sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
+          <div>
+            <p className="text-[15px] font-medium text-text">{result.person}</p>
+            <p className="text-[11px] text-muted">
+              {result.windowLabel} · {result.ingestedCount} events seen, {result.noiseDropped} dropped as noise
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <SourceBadge live={result.live} />
+            <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted uppercase">
+              {result.usedModel ? "Model-drafted" : "Template-drafted"}
+            </span>
+          </div>
         </div>
-      </div>
 
-      <div className="mt-4 space-y-5">
+        <div className="mt-4 space-y-5">
         {result.sections.map((s) => (
           <div key={s.cluster}>
             <p className="text-[12px] font-medium text-accent">{s.theme}</p>
@@ -588,9 +595,10 @@ function ResponseCard({ result }: { result: ApiResult }) {
         ))}
       </div>
 
-      <p className="mt-5 border-t border-border pt-3 text-[11px] text-muted">
-        No source link, no sentence — every line above traces to something clickable.
-      </p>
+        <p className="mt-5 border-t border-border pt-3 text-[11px] text-muted">
+          No source link, no sentence — every line above traces to something clickable.
+        </p>
+      </div>
     </div>
   );
 }

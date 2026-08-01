@@ -251,6 +251,44 @@ async function answerFollowUp(
   return { answer: top.map((e) => withPeriod(e.summary)).join(" "), citations: top.map(toCitation) };
 }
 
+// A short, spoken-style reply that opens a packet — the thing that makes
+// this read as a chatbot answering a question instead of a report
+// rendering. Grounded on purpose: it's fed only the already-firewalled
+// section sentences (each already welded to its own citations), never the
+// raw events, so a paraphrase here can restate or connect those facts but
+// has nothing ungrounded to invent from.
+async function draftLead(personName: string, prompt: string, windowLabel: string, sections: Section[]): Promise<string | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey || sections.length === 0) return null;
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.OPENROUTER_CHAT_MODEL ?? "openai/gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You open a chat reply to a manager's question about ${personName}'s recent work (${windowLabel}). Speak directly to their question, plainly and conversationally — like a colleague giving a quick verbal update, not a report summary. Use ONLY the confirmed facts given below; never add a claim, ticket, or detail that isn't already there, never speculate, and never rate, rank, or evaluate ${personName} — that's not your call. 1-2 sentences, no markdown, no bullet points.`,
+          },
+          {
+            role: "user",
+            content: `Question: ${prompt}\n\nConfirmed facts:\n${sections.map((s) => `- ${s.sentence}`).join("\n")}`,
+          },
+        ],
+        max_completion_tokens: 120,
+        temperature: 0.5,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content?.trim();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 // Loose on purpose: a judge saying "ben" or "arsen" should still land on
 // "benjamin nisevich" or "Ars Ray". Exact/substring match first, then a
 // nickname pass — any query word of 3+ letters that's a prefix (either
@@ -289,7 +327,7 @@ function fixtureSubstantiveEvents(person: Person, days: number): DraftableEvent[
     .map((e) => ({ id: e.id, source: e.source, ts: e.ts, summary: e.summary, url: e.url }));
 }
 
-async function packetForFixturePerson(person: Person, days: number, windowLabel: string) {
+async function packetForFixturePerson(prompt: string, person: Person, days: number, windowLabel: string) {
   const all = eventsForPerson(person.id);
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const inWindow = all.filter((e) => +new Date(e.ts) >= cutoff);
@@ -323,6 +361,7 @@ async function packetForFixturePerson(person: Person, days: number, windowLabel:
     .slice(0, 6);
 
   const { sections, usedModel } = await buildSections(person.name, clusters);
+  const lead = await draftLead(person.name, prompt, windowLabel, sections);
 
   return {
     kind: "packet" as const,
@@ -337,6 +376,7 @@ async function packetForFixturePerson(person: Person, days: number, windowLabel:
     noiseDropped,
     clusterCount: clusters.length,
     usedModel,
+    lead,
     generatedAt: new Date().toISOString(),
     sections,
     context,
@@ -356,7 +396,7 @@ function liveSubstantiveEvents(person: LivePerson, days: number, events: LiveEve
     .map((e) => ({ id: e.id, source: e.source, ts: e.ts, summary: e.summary, url: e.url }));
 }
 
-async function packetForLivePerson(person: LivePerson, days: number, windowLabel: string, events: LiveEvent[]) {
+async function packetForLivePerson(prompt: string, person: LivePerson, days: number, windowLabel: string, events: LiveEvent[]) {
   const personEvents = liveSubstantiveEvents(person, days, events);
   const context: Context = { person: person.name, windowDays: days, windowLabel, live: true };
 
@@ -409,6 +449,7 @@ async function packetForLivePerson(person: LivePerson, days: number, windowLabel
     .slice(0, 6);
 
   const { sections, usedModel } = await buildSections(person.name, clusters);
+  const lead = await draftLead(person.name, prompt, windowLabel, sections);
 
   return {
     kind: "packet" as const,
@@ -422,6 +463,7 @@ async function packetForLivePerson(person: LivePerson, days: number, windowLabel
     noiseDropped: 0,
     clusterCount: clusters.length,
     usedModel,
+    lead,
     generatedAt: new Date().toISOString(),
     sections,
     context,
@@ -437,12 +479,12 @@ async function handleFixture(
   windowExplicit: boolean,
 ) {
   const person = matchPerson<Person>(prompt, PEOPLE);
-  if (person) return packetForFixturePerson(person, days, windowLabel);
+  if (person) return packetForFixturePerson(prompt, person, days, windowLabel);
 
   if (context?.person) {
     const contextPerson = PEOPLE.find((p) => p.name === context.person);
     if (contextPerson) {
-      if (windowExplicit) return packetForFixturePerson(contextPerson, days, windowLabel);
+      if (windowExplicit) return packetForFixturePerson(prompt, contextPerson, days, windowLabel);
       const events = fixtureSubstantiveEvents(contextPerson, days);
       const { answer, citations } = await answerFollowUp(contextPerson.name, events, prompt, history);
       return {
@@ -485,12 +527,12 @@ async function handleLive(
   }
 
   const person = matchPerson<LivePerson>(prompt, people);
-  if (person) return packetForLivePerson(person, days, windowLabel, events);
+  if (person) return packetForLivePerson(prompt, person, days, windowLabel, events);
 
   if (context?.person) {
     const contextPerson = matchPerson<LivePerson>(context.person, people);
     if (contextPerson) {
-      if (windowExplicit) return packetForLivePerson(contextPerson, days, windowLabel, events);
+      if (windowExplicit) return packetForLivePerson(prompt, contextPerson, days, windowLabel, events);
       const substantive = liveSubstantiveEvents(contextPerson, days, events);
       const { answer, citations } = await answerFollowUp(contextPerson.name, substantive, prompt, history);
       return {
