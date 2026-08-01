@@ -31,6 +31,7 @@ function parseWindow(prompt: string): { days: number; label: string } {
 }
 
 interface Citation {
+  id: string;
   source: EventSource;
   url: string;
   ts: string;
@@ -187,7 +188,7 @@ export async function POST(req: Request) {
       sentence,
       citations: citedEvents
         .sort((a, b) => +new Date(b.ts) - +new Date(a.ts))
-        .map((e) => ({ source: e.source, url: e.url, ts: e.ts, summary: e.summary })),
+        .map((e) => ({ id: e.id, source: e.source, url: e.url, ts: e.ts, summary: e.summary })),
     });
   }
 

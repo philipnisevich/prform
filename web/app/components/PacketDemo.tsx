@@ -1,19 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SiGithub, SiLinear } from "react-icons/si";
-import { FaSlack } from "react-icons/fa";
-import { Building2, Mic, Loader2, ArrowRight } from "lucide-react";
-import type { IconType } from "react-icons";
-
-type SourceId = "slack" | "github" | "linear" | "crm";
-
-const SOURCE_META: Record<SourceId, { label: string; color: string; Icon: IconType | typeof Building2 }> = {
-  slack: { label: "Slack", color: "#611f69", Icon: FaSlack },
-  github: { label: "GitHub", color: "#181717", Icon: SiGithub },
-  linear: { label: "Linear", color: "#5e6ad2", Icon: SiLinear },
-  crm: { label: "CRM", color: "#0369a1", Icon: Building2 },
-};
+import Link from "next/link";
+import { Mic, Loader2, ArrowRight } from "lucide-react";
+import { SOURCE_META, type SourceId } from "@/lib/sources";
 
 const STAGES = [
   { id: "ingest", label: "Ingest" },
@@ -23,6 +13,7 @@ const STAGES = [
 ] as const;
 
 interface Citation {
+  id: string;
   source: SourceId;
   url: string;
   ts: string;
@@ -298,21 +289,20 @@ function PacketResultView({ result }: { result: ApiResult }) {
             <p className="text-[12px] font-medium text-accent">{s.theme}</p>
             <p className="mt-1 text-[14px] leading-relaxed text-text">{s.sentence}</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {s.citations.map((c, i) => {
+              {s.citations.map((c) => {
                 const meta = SOURCE_META[c.source];
                 const Icon = meta.Icon;
                 return (
-                  <a
-                    key={i}
-                    href={c.url}
+                  <Link
+                    key={c.id}
+                    href={`/evidence/${c.id}`}
                     target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1.5 rounded-full border border-border bg-surface-2/60 px-2.5 py-1 text-[11px] text-muted transition hover:text-text"
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-surface-2/60 px-2.5 py-1 text-[11px] text-muted transition hover:border-accent/40 hover:text-text"
                     title={c.summary}
                   >
                     <Icon className="h-3 w-3" style={{ color: meta.color }} />
                     {meta.label}
-                  </a>
+                  </Link>
                 );
               })}
             </div>

@@ -117,3 +117,23 @@ export function eventsForPerson(personId: string): Array<Omit<RawEvent, "daysAgo
     ts: new Date(now - e.daysAgo * 24 * 60 * 60 * 1000).toISOString(),
   }));
 }
+
+export function personById(personId: string): Person | null {
+  return PEOPLE.find((p) => p.id === personId) ?? null;
+}
+
+// Backs /evidence/[id] — the page a citation actually opens. Every citation
+// a packet renders has to resolve to something real to click through to;
+// this is that something, reconstructed from the same event the pipeline
+// read rather than a dead link to a workspace that doesn't exist.
+export function eventById(id: string): (Omit<RawEvent, "daysAgo"> & { ts: string; person: Person }) | null {
+  const found = RAW_EVENTS.find((e) => e.id === id);
+  if (!found) return null;
+  const person = personById(found.personId);
+  if (!person) return null;
+  return {
+    ...found,
+    ts: new Date(Date.now() - found.daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+    person,
+  };
+}
