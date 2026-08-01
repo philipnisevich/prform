@@ -434,7 +434,10 @@ interface LivePull {
   events: LiveEvent[];
 }
 
-let cache: { at: number; pull: Promise<LivePull> } | null = null;
+// Keyed by windowDays — a conversation that widens its window mid-thread
+// ("what about this month") must not reuse a narrower pull's cache entry
+// and silently miss the older events.
+const cacheByWindow = new Map<number, { at: number; pull: Promise<LivePull> }>();
 const CACHE_MS = 20_000;
 
 // A person+window question always needs the whole recent window harvested
@@ -444,7 +447,8 @@ const CACHE_MS = 20_000;
 // re-hit four APIs for data that hasn't changed.
 export async function pullLiveWindow(windowDays: number): Promise<LivePull> {
   const now = Date.now();
-  if (cache && now - cache.at < CACHE_MS) return cache.pull;
+  const cached = cacheByWindow.get(windowDays);
+  if (cached && now - cached.at < CACHE_MS) return cached.pull;
 
   const pull = (async (): Promise<LivePull> => {
     const windowStart = new Date(now - windowDays * 24 * 60 * 60 * 1000);
@@ -469,6 +473,6 @@ export async function pullLiveWindow(windowDays: number): Promise<LivePull> {
     return { people: directory.people, events };
   })();
 
-  cache = { at: now, pull };
+  cacheByWindow.set(windowDays, { at: now, pull });
   return pull;
 }
