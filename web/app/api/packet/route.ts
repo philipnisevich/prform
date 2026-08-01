@@ -120,18 +120,28 @@ async function draftWithModel(
           },
           { role: "user", content: JSON.stringify(payload) },
         ],
-        max_completion_tokens: 500,
+        // Up to 6 clusters, each needing a sentence plus a citedIds array —
+        // 500 was tight enough to truncate mid-JSON on a full 6-cluster
+        // packet (caught live: "Expected double-quoted property name").
+        max_completion_tokens: 1400,
         temperature: 0.2,
         response_format: { type: "json_object" },
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[draftWithModel] OpenRouter ${res.status}: ${await res.text()}`);
+      return null;
+    }
     const data = await res.json();
     const raw = data.choices?.[0]?.message?.content;
-    if (!raw) return null;
+    if (!raw) {
+      console.warn(`[draftWithModel] no completion content: ${JSON.stringify(data).slice(0, 500)}`);
+      return null;
+    }
     const parsed = JSON.parse(raw) as { clusters: Array<{ cluster: string; sentence: string; citedIds: string[] }> };
     return new Map(parsed.clusters.map((c) => [c.cluster, { sentence: c.sentence, citedIds: c.citedIds ?? [] }]));
-  } catch {
+  } catch (err) {
+    console.warn(`[draftWithModel] failed: ${err instanceof Error ? err.message : err}`);
     return null;
   }
 }
@@ -157,6 +167,9 @@ async function buildSections(
     if (modelDraft) {
       const citedIds = modelDraft.citedIds.filter((id) => validIds.has(id));
       if (citedIds.length === 0) {
+        console.warn(
+          `[buildSections] firewall dropped model draft for "${cluster}" — citedIds ${JSON.stringify(modelDraft.citedIds)} matched none of ${JSON.stringify([...validIds])}`,
+        );
         sentence = draftDeterministic(events);
       } else {
         sentence = modelDraft.sentence;
