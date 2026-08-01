@@ -359,8 +359,7 @@ export function PacketDemo({ variant = "full", onModeChange }: PacketDemoProps) 
             ))}
           </div>
 
-          <form
-            onSubmit={onSubmit}
+          <div
             className={
               variant === "full"
                 ? "fixed inset-x-0 bottom-6 z-40 flex justify-center px-6"
@@ -380,7 +379,7 @@ export function PacketDemo({ variant = "full", onModeChange }: PacketDemoProps) 
                 elevated={variant === "full"}
               />
             </div>
-          </form>
+          </div>
           {micError && <p className="mt-2 text-center text-xs text-danger">{micError}</p>}
         </div>
       )}

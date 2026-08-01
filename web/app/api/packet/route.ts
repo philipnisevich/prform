@@ -212,7 +212,7 @@ async function answerFollowUp(
           messages: [
             {
               role: "system",
-              content: `You answer a follow-up question about ${personName}'s recent work using ONLY the events listed in the final user message — no outside knowledge, no speculation, never invent a ticket/PR/person not present. If the events don't contain enough to answer, say so plainly. You never rank, score, or recommend anything about a person — if asked to, say that's out of scope. Respond with strict JSON only: {"answer": "<1-3 sentence answer, plain prose>", "citedIds": ["<id>", ...]}`,
+              content: `You answer a follow-up question about ${personName}'s recent work using ONLY the events listed in the final user message — no outside knowledge, no speculation, never invent a ticket/PR/person not present. You never rank, score, or recommend anything about a person — if asked to, say that's out of scope. Set "grounded": true only if your answer states a specific fact drawn from the events, and list every event id it draws from in citedIds. If the events don't contain enough to answer, set "grounded": false, say so plainly in "answer", and leave citedIds empty — that's a legitimate answer, not a failure. Respond with strict JSON only: {"answer": "<1-3 sentence answer, plain prose>", "grounded": true|false, "citedIds": ["<id>", ...]}`,
             },
             ...history.slice(-4).flatMap((h) => [
               { role: "user" as const, content: h.question },
@@ -232,26 +232,52 @@ async function answerFollowUp(
         const data = await res.json();
         const raw = data.choices?.[0]?.message?.content;
         if (raw) {
-          const parsed = JSON.parse(raw) as { answer: string; citedIds?: string[] };
+          const parsed = JSON.parse(raw) as { answer: string; grounded?: boolean; citedIds?: string[] };
           const validIds = new Set(events.map((e) => e.id));
           const citedIds = (parsed.citedIds ?? []).filter((id) => validIds.has(id));
           if (citedIds.length > 0) {
             return { answer: parsed.answer, citations: events.filter((e) => citedIds.includes(e.id)).map(toCitation) };
           }
-          // The firewall: no valid citation, so the free-text answer doesn't
-          // get trusted as-is — fall through to the deterministic search
-          // below instead of shipping an uncited claim.
+          if (!parsed.grounded) {
+            // An honest "I don't have enough to answer that" isn't a claim,
+            // so it doesn't need a citation — trust it as-is rather than
+            // discarding it for the same weak keyword search a real,
+            // unsupported claim would have to fall back to.
+            return { answer: parsed.answer, citations: [] };
+          }
+          console.warn(`[answerFollowUp] firewall dropped a grounded claim with no valid citedIds: ${JSON.stringify(parsed)}`);
+        } else {
+          console.warn(`[answerFollowUp] no completion content: ${JSON.stringify(data).slice(0, 500)}`);
         }
+      } else {
+        console.warn(`[answerFollowUp] OpenRouter ${res.status}: ${await res.text()}`);
       }
-    } catch {
-      /* fall through to the deterministic path */
+    } catch (err) {
+      console.warn(`[answerFollowUp] failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  const qWords = question.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+  // A stoplist matters more here than in normal search: these are exactly
+  // the words that show up in casual Slack chatter regardless of topic
+  // ("anyone know why...", "does someone have...") — without it, a vague
+  // follow-up question reliably keyword-matches unrelated noise instead of
+  // honestly coming up empty.
+  const STOP_WORDS = new Set([
+    "anyone", "someone", "something", "anything", "everyone", "everything",
+    "there", "their", "about", "which", "would", "could", "should", "please",
+    "thanks", "thing", "things", "still", "really", "actually", "maybe",
+  ]);
+  const qWords = question
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !STOP_WORDS.has(w));
   const scored = events
     .map((e) => ({ e, score: qWords.filter((w) => e.summary.toLowerCase().includes(w)).length }))
     .filter((s) => s.score > 0)
+    // A single word matching is too weak to trust as "the answer" once
+    // there were multiple candidate words to match against — only act on
+    // it when the question genuinely offered nothing stronger to go on.
+    .filter((s) => s.score > 1 || qWords.length <= 1)
     .sort((a, b) => b.score - a.score || +new Date(b.e.ts) - +new Date(a.e.ts));
 
   if (scored.length === 0) {
