@@ -1,0 +1,161 @@
+@import "tailwindcss";
+@import "lenis/dist/lenis.css";
+
+:root {
+  --bg: #faf9f5;
+  --surface: #ffffff;
+  --surface-2: #f1efe8;
+  --text: #15161a;
+  --text-muted: #6b6d73;
+  --border: #e4e1d8;
+  --accent: #0f6b4f;
+  --accent-contrast: #ffffff;
+  --ok: #2f8f5b;
+  --danger: #b8842c;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-ok: var(--ok);
+  --color-danger: var(--danger);
+  --font-display: var(--font-display);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: auto;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+/*
+ * Hero artwork — a robot patiently letting a bird land in its hand. Source
+ * file had letterbox bars baked in; those are cropped out (see git history),
+ * not hidden by CSS. Positioned right-of-center so the robot-and-bird pair
+ * sits nearer the terminal panel, not directly behind the headline.
+ */
+.hero-art {
+  background-color: #79c1e8;
+  background-image: url("/usethisthis.png");
+  background-position: 65% center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+/*
+ * Scrim for the text column: heaviest on the left where the copy sits,
+ * clearing to nothing on the right so the sky and banners stay visible
+ * behind the terminal panel. The second layer closes the band into the page
+ * background at the very bottom.
+ */
+.hero-veil {
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 95%,
+      rgba(250, 249, 245, 0.35) 99%,
+      var(--bg) 100%
+    ),
+    linear-gradient(
+      to right,
+      rgba(250, 249, 245, 0.92) 0%,
+      rgba(250, 249, 245, 0.78) 34%,
+      rgba(250, 249, 245, 0.32) 62%,
+      transparent 85%
+    );
+}
+
+/*
+ * Footer bookends the hero with the same artwork. The cream wash sits heavy
+ * — footer type is small and muted, and has to stay readable over the
+ * busiest part of the art.
+ */
+.footer-art {
+  background-color: #79c1e8;
+  background-image:
+    linear-gradient(
+      to bottom,
+      var(--bg) 0%,
+      rgba(250, 249, 245, 0.88) 14%,
+      rgba(250, 249, 245, 0.84) 58%,
+      rgba(250, 249, 245, 0.66) 100%
+    ),
+    url("/usethisthis.png");
+  background-position:
+    center top,
+    center;
+  background-repeat: no-repeat;
+  background-size:
+    cover,
+    cover;
+}
+
+/*
+ * FAQ answers ease in instead of snapping. <details> has no transition on
+ * open, so this runs as a keyframe on the answer itself. Collapsing stays
+ * instant — that is the browser's own behaviour and animating it needs JS.
+ */
+@keyframes faq-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+details[open] > .faq-answer {
+  animation: faq-answer-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

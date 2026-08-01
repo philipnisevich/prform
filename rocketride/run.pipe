@@ -1,0 +1,17 @@
+{
+  "components": [
+    {
+      "id": "webhook_1",
+      "provider": "webhook",
+      "config": { "hideForm": true, "mode": "Source", "parameters": {}, "type": "webhook" }
+    },
+    {
+      "id": "response_text_1",
+      "provider": "response_text",
+      "config": { "laneName": "text" },
+      "input": [{ "lane": "text", "from": "webhook_1" }]
+    }
+  ],
+  "project_id": "00000000-0000-0000-0000-000000000000",
+  "version": 1
+}

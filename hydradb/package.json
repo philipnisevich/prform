@@ -1,0 +1,17 @@
+{
+  "name": "witness-hydradb",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap": "tsx bootstrap.ts",
+    "sync": "tsx sync.ts",
+    "serve": "tsx server.ts",
+    "seed-github": "tsx seed-github-demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "dotenv": "^16",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

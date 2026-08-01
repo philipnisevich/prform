@@ -1,0 +1,26 @@
+
+# macOS
+.DS_Store
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Playwright MCP artifacts
+.playwright-mcp
+
+# InsForge & AI agent skills
+.insforge
+.agent
+.agents
+.augment
+.claude
+.cline
+.github/copilot*
+.kilocode
+.qoder
+.qwen
+.roo
+.trae
+.windsurf
