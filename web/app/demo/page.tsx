@@ -1,12 +1,7 @@
 import Link from "next/link";
 import { Logo } from "../components/Logo";
 import { PacketDemo } from "../components/PacketDemo";
-
-const WORKSPACE_PEOPLE = [
-  { name: "Daniel Cho", role: "Backend" },
-  { name: "Marcin Wozniak", role: "Platform" },
-  { name: "Priya Anand", role: "Mobile" },
-];
+import { WorkspaceDirectory } from "../components/WorkspaceDirectory";
 
 export default function DemoPage() {
   return (
@@ -35,27 +30,7 @@ export default function DemoPage() {
           <PacketDemo variant="full" />
         </div>
 
-        <div className="mt-12 rounded-xl border border-border bg-surface p-5">
-          <p className="font-mono text-[11px] tracking-wide text-muted uppercase">
-            This workspace
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            {WORKSPACE_PEOPLE.map((p) => (
-              <span
-                key={p.name}
-                className="flex items-center gap-2 rounded-full border border-border bg-surface-2/60 px-3 py-1.5 text-[13px] text-text"
-              >
-                {p.name}
-                <span className="text-[11px] text-muted">{p.role}</span>
-              </span>
-            ))}
-          </div>
-          <p className="mt-3 text-[12px] leading-relaxed text-muted">
-            Sourced from a warm-cache fixture standing in for a live Slack / Linear / GitHub /
-            CRM pull — same pipeline, no venue-wifi dependency. Every citation still resolves to
-            a real-shaped permalink.
-          </p>
-        </div>
+        <WorkspaceDirectory />
       </main>
     </div>
   );

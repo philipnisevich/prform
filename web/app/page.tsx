@@ -173,9 +173,9 @@ export default function Home() {
             Ask it about someone. Watch it decline what it shouldn&rsquo;t answer.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-            This runs the real pipeline against a warm-cache workspace &mdash; Daniel, Marcin,
-            and Priya are real fixture people with real-shaped citations. Try a status check,
-            then try the curveball.
+            This runs the real pipeline, live, against whichever workspace is connected right
+            now &mdash; every citation is a real, clickable link. Try a status check, then try
+            the curveball.
           </p>
         </div>
         <div className="mt-12">

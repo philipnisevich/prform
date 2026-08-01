@@ -1,14 +1,20 @@
 // Receipts — the whole pipeline for one open prompt: trigger, ingest,
-// cluster, map, render. Runs against the warm-cache fixture (fixture.ts)
-// standing in for a live Slack/Linear/GitHub/CRM pull — same shape of data,
-// same pipeline, no venue-wifi dependency.
+// cluster, map, render.
 //
-// The one rule that isn't negotiable: a drafted sentence with no matching
-// citation never reaches the response. That check happens here, in code,
-// not as a prompt instruction the model could ignore.
+// Two backends, same pipeline and same firewall. If Slack/GitHub/Linear
+// credentials are configured (web/.env.local — see liveSources.ts's
+// header), this pulls the real workspace and every citation is a real,
+// clickable permalink. Otherwise it runs against the warm-cache fixture
+// (fixture.ts) — same shape of data, so nothing else about the pipeline
+// changes, just where the events came from.
+//
+// The one rule that isn't negotiable either way: a drafted sentence with no
+// matching citation never reaches the response. That check happens here, in
+// code, not as a prompt instruction the model could ignore.
 
 import { NextResponse } from "next/server";
 import { CLUSTER_LABELS, PEOPLE, eventsForPerson, personByQuery, type EventSource } from "./fixture";
+import { pullLiveWindow, liveConfigured, type LiveEvent, type LivePerson } from "@/lib/liveSources";
 
 export const runtime = "nodejs";
 
@@ -45,18 +51,28 @@ interface Section {
   citations: Citation[];
 }
 
-function draftDeterministic(clusterEvents: ReturnType<typeof eventsForPerson>): string {
+interface DraftableEvent {
+  id: string;
+  source: EventSource;
+  ts: string;
+  summary: string;
+  url: string;
+}
+
+function withPeriod(text: string): string {
+  return /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+}
+
+function draftDeterministic(clusterEvents: DraftableEvent[]): string {
   const sorted = [...clusterEvents].sort((a, b) => +new Date(b.ts) - +new Date(a.ts));
   const latest = sorted[0];
   const n = sorted.length;
-  return n > 1
-    ? `${n} related updates, most recently: ${latest.summary}.`
-    : `${latest.summary}.`;
+  return n > 1 ? `${n} related updates, most recently: ${withPeriod(latest.summary)}` : withPeriod(latest.summary);
 }
 
 async function draftWithModel(
   personName: string,
-  clusters: Array<{ cluster: string; events: ReturnType<typeof eventsForPerson> }>,
+  clusters: Array<{ cluster: string; events: DraftableEvent[] }>,
 ): Promise<Map<string, { sentence: string; citedIds: string[] }> | null> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
@@ -95,72 +111,19 @@ async function draftWithModel(
   }
 }
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const prompt: string | undefined = body?.prompt;
-  if (!prompt || !prompt.trim()) {
-    return NextResponse.json({ error: "prompt is required" }, { status: 400 });
-  }
-
-  // --- Trigger: is this in the one lane the agent covers? -----------------
-  const person = personByQuery(prompt);
-  if (!person) {
-    return NextResponse.json({
-      outOfScope: true,
-      prompt,
-      reason: "unknown-person",
-      message: `That's not a person I can pull a packet for. This workspace has ${PEOPLE.map((p) => p.name).join(", ")}. Try "Status check on ${PEOPLE[0].name.split(" ")[0]}."`,
-    });
-  }
-  if (VERDICT_WORDS.test(prompt)) {
-    return NextResponse.json({
-      outOfScope: true,
-      prompt,
-      person: person.name,
-      reason: "verdict-request",
-      message: `That's a judgment call, not an evidence question — out of scope on purpose. I can assemble what ${person.name.split(" ")[0]} actually did, cited, but I don't rank or rate people. Try "Status check on ${person.name.split(" ")[0]}" instead.`,
-    });
-  }
-
-  const { days, label: windowLabel } = parseWindow(prompt);
-
-  // --- Ingest: normalize everything for this person into one stream -------
-  const all = eventsForPerson(person.id);
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const inWindow = all.filter((e) => +new Date(e.ts) >= cutoff);
-  const substantive = inWindow.filter((e) => e.cluster !== "noise");
-  const noiseDropped = inWindow.length - substantive.length;
-
-  if (substantive.length === 0) {
-    return NextResponse.json({
-      outOfScope: false,
-      empty: true,
-      prompt,
-      person: person.name,
-      windowDays: days,
-      windowLabel,
-      message: `No substantive activity for ${person.name} in ${windowLabel}. ${noiseDropped} low-signal event${noiseDropped === 1 ? "" : "s"} seen and dropped — nothing worth a citation.`,
-    });
-  }
-
-  // --- Cluster: group the noisy stream into the themes that mattered ------
-  const byCluster = new Map<string, typeof substantive>();
-  for (const e of substantive) {
-    const list = byCluster.get(e.cluster) ?? [];
-    list.push(e);
-    byCluster.set(e.cluster, list);
-  }
-  const clusters = Array.from(byCluster.entries())
-    .map(([cluster, events]) => ({ cluster, events }))
-    .sort((a, b) => Math.max(...b.events.map((e) => +new Date(e.ts))) - Math.max(...a.events.map((e) => +new Date(e.ts))))
-    .slice(0, 6);
-
-  // --- Map: draft a sentence per cluster, welded to its evidence ----------
-  const drafted = await draftWithModel(person.name, clusters);
+// The map + render + firewall step, shared by both backends: draft a
+// sentence per cluster, and if the model's citations don't check out
+// against that cluster's real events, rebuild the sentence deterministically
+// from the evidence instead of trusting it.
+async function buildSections(
+  personName: string,
+  clusters: Array<{ cluster: string; theme: string; events: DraftableEvent[] }>,
+): Promise<{ sections: Section[]; usedModel: boolean }> {
+  const drafted = await draftWithModel(personName, clusters);
   let usedModel = false;
-
   const sections: Section[] = [];
-  for (const { cluster, events } of clusters) {
+
+  for (const { cluster, theme, events } of clusters) {
     const validIds = new Set(events.map((e) => e.id));
     let sentence: string;
     let citedEvents = events;
@@ -168,9 +131,6 @@ export async function POST(req: Request) {
     const modelDraft = drafted?.get(cluster);
     if (modelDraft) {
       const citedIds = modelDraft.citedIds.filter((id) => validIds.has(id));
-      // The firewall: a sentence with zero valid citations never renders,
-      // no matter what the model wrote. Fall back to the deterministic
-      // draft instead of dropping the theme silently.
       if (citedIds.length === 0) {
         sentence = draftDeterministic(events);
       } else {
@@ -184,7 +144,7 @@ export async function POST(req: Request) {
 
     sections.push({
       cluster,
-      theme: CLUSTER_LABELS[cluster] ?? cluster,
+      theme,
       sentence,
       citations: citedEvents
         .sort((a, b) => +new Date(b.ts) - +new Date(a.ts))
@@ -192,9 +152,77 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({
+  return { sections, usedModel };
+}
+
+function matchPerson<T extends { name: string }>(query: string, people: T[]): T | null {
+  const q = query.toLowerCase();
+  return (
+    people.find((p) => p.name.toLowerCase() === q) ??
+    people.find((p) => q.includes(p.name.toLowerCase())) ??
+    people.find((p) => q.includes(p.name.toLowerCase().split(" ")[0])) ??
+    null
+  );
+}
+
+async function runFixture(prompt: string, days: number, windowLabel: string) {
+  const person = personByQuery(prompt);
+  if (!person) {
+    return {
+      outOfScope: true,
+      prompt,
+      reason: "unknown-person",
+      live: false,
+      message: `That's not a person I can pull a packet for. This workspace has ${PEOPLE.map((p) => p.name).join(", ")}. Try "Status check on ${PEOPLE[0].name.split(" ")[0]}."`,
+    };
+  }
+  if (VERDICT_WORDS.test(prompt)) {
+    return {
+      outOfScope: true,
+      prompt,
+      person: person.name,
+      reason: "verdict-request",
+      live: false,
+      message: `That's a judgment call, not an evidence question — out of scope on purpose. I can assemble what ${person.name.split(" ")[0]} actually did, cited, but I don't rank or rate people. Try "Status check on ${person.name.split(" ")[0]}" instead.`,
+    };
+  }
+
+  const all = eventsForPerson(person.id);
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const inWindow = all.filter((e) => +new Date(e.ts) >= cutoff);
+  const substantive = inWindow.filter((e) => e.cluster !== "noise");
+  const noiseDropped = inWindow.length - substantive.length;
+
+  if (substantive.length === 0) {
+    return {
+      outOfScope: false,
+      empty: true,
+      live: false,
+      prompt,
+      person: person.name,
+      windowDays: days,
+      windowLabel,
+      message: `No substantive activity for ${person.name} in ${windowLabel}. ${noiseDropped} low-signal event${noiseDropped === 1 ? "" : "s"} seen and dropped — nothing worth a citation.`,
+    };
+  }
+
+  const byCluster = new Map<string, typeof substantive>();
+  for (const e of substantive) {
+    const list = byCluster.get(e.cluster) ?? [];
+    list.push(e);
+    byCluster.set(e.cluster, list);
+  }
+  const clusters = Array.from(byCluster.entries())
+    .map(([cluster, events]) => ({ cluster, theme: CLUSTER_LABELS[cluster] ?? cluster, events }))
+    .sort((a, b) => Math.max(...b.events.map((e) => +new Date(e.ts))) - Math.max(...a.events.map((e) => +new Date(e.ts))))
+    .slice(0, 6);
+
+  const { sections, usedModel } = await buildSections(person.name, clusters);
+
+  return {
     outOfScope: false,
     empty: false,
+    live: false,
     prompt,
     person: person.name,
     role: person.role,
@@ -206,5 +234,127 @@ export async function POST(req: Request) {
     usedModel,
     generatedAt: new Date().toISOString(),
     sections,
+  };
+}
+
+const LIVE_FALLBACK_LABEL: Record<string, string> = {
+  slack: "Slack activity",
+  github: "GitHub activity",
+  linear: "Linear activity",
+};
+
+async function runLive(prompt: string, days: number, windowLabel: string) {
+  const { people, events } = await pullLiveWindow(days);
+  if (people.length === 0 && events.length === 0) {
+    throw new Error("live pull returned nothing usable — check Slack/GitHub/Linear credentials");
+  }
+
+  const person = matchPerson<LivePerson>(prompt, people);
+  if (!person) {
+    return {
+      outOfScope: true,
+      prompt,
+      reason: "unknown-person",
+      live: true,
+      message:
+        people.length > 0
+          ? `That's not a person I can find in the connected workspace. This workspace has ${people.map((p) => p.name).join(", ")}.`
+          : `The connected workspace didn't return a directory to match against — check the Slack/GitHub/Linear credentials in web/.env.local.`,
+    };
+  }
+  if (VERDICT_WORDS.test(prompt)) {
+    return {
+      outOfScope: true,
+      prompt,
+      person: person.name,
+      reason: "verdict-request",
+      live: true,
+      message: `That's a judgment call, not an evidence question — out of scope on purpose. I can assemble what ${person.name.split(" ")[0]} actually did, cited, but I don't rank or rate people. Try "Status check on ${person.name.split(" ")[0]}" instead.`,
+    };
+  }
+
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const personEvents = events.filter((e) => e.authorId === person.id && +new Date(e.ts) >= cutoff);
+
+  if (personEvents.length === 0) {
+    return {
+      outOfScope: false,
+      empty: true,
+      live: true,
+      prompt,
+      person: person.name,
+      windowDays: days,
+      windowLabel,
+      message: `No activity attributable to ${person.name} in ${windowLabel} across the connected Slack/GitHub/Linear workspace.`,
+    };
+  }
+
+  // Cluster: events that share an extracted ticket/PR reference are the
+  // same theme almost by definition — the message, the ticket, and the PR
+  // that closed it. Anything with no reference falls back to one bucket
+  // per source rather than being dropped.
+  const byRef = new Map<string, LiveEvent[]>();
+  const byFallback = new Map<string, LiveEvent[]>();
+  for (const e of personEvents) {
+    if (e.ref) {
+      const list = byRef.get(e.ref) ?? [];
+      list.push(e);
+      byRef.set(e.ref, list);
+    } else {
+      const list = byFallback.get(e.source) ?? [];
+      list.push(e);
+      byFallback.set(e.source, list);
+    }
+  }
+  const refClusters = Array.from(byRef.entries()).map(([ref, evs]) => {
+    const title = evs.find((e) => e.refTitle)?.refTitle;
+    return { cluster: ref, theme: title ? `${ref} — ${title}` : ref, events: evs };
   });
+  const fallbackClusters = Array.from(byFallback.entries()).map(([source, evs]) => ({
+    cluster: `${source}-activity`,
+    theme: LIVE_FALLBACK_LABEL[source] ?? source,
+    events: evs,
+  }));
+
+  const clusters = [...refClusters, ...fallbackClusters]
+    .sort((a, b) => Math.max(...b.events.map((e) => +new Date(e.ts))) - Math.max(...a.events.map((e) => +new Date(e.ts))))
+    .slice(0, 6);
+
+  const { sections, usedModel } = await buildSections(person.name, clusters);
+
+  return {
+    outOfScope: false,
+    empty: false,
+    live: true,
+    prompt,
+    person: person.name,
+    windowDays: days,
+    windowLabel,
+    ingestedCount: personEvents.length,
+    noiseDropped: 0,
+    clusterCount: clusters.length,
+    usedModel,
+    generatedAt: new Date().toISOString(),
+    sections,
+  };
+}
+
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  const prompt: string | undefined = body?.prompt;
+  if (!prompt || !prompt.trim()) {
+    return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+  }
+
+  const { days, label: windowLabel } = parseWindow(prompt);
+
+  if (liveConfigured()) {
+    try {
+      return NextResponse.json(await runLive(prompt, days, windowLabel));
+    } catch (err) {
+      console.warn(`[packet] live pull failed, falling back to the fixture: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  return NextResponse.json(await runFixture(prompt, days, windowLabel));
 }

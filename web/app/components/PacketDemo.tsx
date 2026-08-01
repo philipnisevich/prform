@@ -28,6 +28,7 @@ interface Section {
 interface PacketResult {
   outOfScope: false;
   empty: boolean;
+  live: boolean;
   prompt: string;
   person: string;
   role?: string;
@@ -40,6 +41,7 @@ interface PacketResult {
 }
 interface OutOfScopeResult {
   outOfScope: true;
+  live: boolean;
   prompt: string;
   person?: string;
   reason: string;
@@ -51,12 +53,13 @@ interface PacketDemoProps {
   variant?: "compact" | "full";
 }
 
-const SUGGESTIONS = [
+const FALLBACK_SUGGESTIONS = [
   "Status check on Daniel",
   "What did Marcin ship this week",
   "How's Priya's mobile release going",
 ];
 const CURVEBALL = "Who's my worst engineer?";
+const firstName = (name: string) => name.split(" ")[0];
 
 // Minimal shape of the Web Speech API — not in the default TS lib, and only
 // a subset is used here (start/stop plus the one result we read).
@@ -78,8 +81,27 @@ export function PacketDemo({ variant = "full" }: PacketDemoProps) {
   const [stageIndex, setStageIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_SUGGESTIONS);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const runRef = useRef<(rawPrompt: string) => void>(() => {});
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/packet/directory")
+      .then((r) => r.json())
+      .then((data: { live: boolean; people: { name: string }[] }) => {
+        if (cancelled || !data.live || data.people.length === 0) return;
+        const names = data.people.map((p) => firstName(p.name));
+        const [a, b = a, c = a] = names;
+        setSuggestions([`Status check on ${a}`, `What did ${b} ship this week`, `How's ${c} doing`]);
+      })
+      .catch(() => {
+        /* fixture suggestions are already the default state */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (variant !== "full") return;
@@ -199,7 +221,7 @@ export function PacketDemo({ variant = "full" }: PacketDemoProps) {
       {micError && <p className="mt-2 text-center text-xs text-danger">{micError}</p>}
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button
             key={s}
             type="button"
@@ -251,11 +273,22 @@ export function PacketDemo({ variant = "full" }: PacketDemoProps) {
   );
 }
 
+function SourceBadge({ live }: { live: boolean }) {
+  return (
+    <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted uppercase">
+      {live ? "Live pull" : "Warm cache"}
+    </span>
+  );
+}
+
 function PacketResultView({ result }: { result: ApiResult }) {
   if (result.outOfScope) {
     return (
       <div className="mt-6 rounded-xl border border-dashed border-danger/40 bg-danger/5 p-5">
-        <p className="font-mono text-[11px] tracking-wide text-danger uppercase">Out of scope — declined</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-mono text-[11px] tracking-wide text-danger uppercase">Out of scope — declined</p>
+          <SourceBadge live={result.live} />
+        </div>
         <p className="mt-2 text-[14px] leading-relaxed text-text">{result.message}</p>
       </div>
     );
@@ -278,9 +311,12 @@ function PacketResultView({ result }: { result: ApiResult }) {
             {result.windowLabel} · {result.ingestedCount} events seen, {result.noiseDropped} dropped as noise
           </p>
         </div>
-        <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted uppercase">
-          {result.usedModel ? "Model-drafted" : "Template-drafted"}
-        </span>
+        <div className="flex items-center gap-2">
+          <SourceBadge live={result.live} />
+          <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted uppercase">
+            {result.usedModel ? "Model-drafted" : "Template-drafted"}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4 space-y-5">
@@ -292,16 +328,26 @@ function PacketResultView({ result }: { result: ApiResult }) {
               {s.citations.map((c) => {
                 const meta = SOURCE_META[c.source];
                 const Icon = meta.Icon;
-                return (
-                  <Link
-                    key={c.id}
-                    href={`/evidence/${c.id}`}
-                    target="_blank"
-                    className="flex items-center gap-1.5 rounded-full border border-border bg-surface-2/60 px-2.5 py-1 text-[11px] text-muted transition hover:border-accent/40 hover:text-text"
-                    title={c.summary}
-                  >
+                const chipClass =
+                  "flex items-center gap-1.5 rounded-full border border-border bg-surface-2/60 px-2.5 py-1 text-[11px] text-muted transition hover:border-accent/40 hover:text-text";
+                const label = (
+                  <>
                     <Icon className="h-3 w-3" style={{ color: meta.color }} />
                     {meta.label}
+                  </>
+                );
+                // Live pulls cite a real permalink in the real workspace —
+                // link straight there. The fixture's URLs point at a
+                // workspace that doesn't exist, so those route to an
+                // internal page that reconstructs the same cited event
+                // instead of a dead link.
+                return result.live ? (
+                  <a key={c.id} href={c.url} target="_blank" rel="noreferrer" className={chipClass} title={c.summary}>
+                    {label}
+                  </a>
+                ) : (
+                  <Link key={c.id} href={`/evidence/${c.id}`} target="_blank" className={chipClass} title={c.summary}>
+                    {label}
                   </Link>
                 );
               })}
