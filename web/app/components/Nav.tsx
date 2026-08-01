@@ -2,8 +2,8 @@ import { Logo } from "./Logo";
 
 const LINKS = [
   { href: "#how-it-works", label: "How it works" },
-  { href: "#proof", label: "Proof" },
-  { href: "#stack", label: "Stack" },
+  { href: "#proof", label: "Try it" },
+  { href: "#firewall", label: "The firewall" },
   { href: "#faq", label: "FAQ" },
 ];
 

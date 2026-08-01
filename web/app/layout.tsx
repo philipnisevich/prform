@@ -13,9 +13,9 @@ const instrumentSerif = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Witness — your engineering dashboard is lying to you",
+  title: "Receipts — ask about someone's week, get a cited packet",
   description:
-    "Witness finds the engineering work that never gets credited, and confirms every finding against a second source — so restricting it to one connector doesn't go blank, it becomes a confident, wrong performance review. That's provable, not just claimed.",
+    "Receipts answers a spoken question about a person's recent work by assembling a cited evidence packet from Slack, Linear, GitHub, and your CRM — never a verdict. No source link, no sentence. The agent gathers; the human judges.",
 };
 
 export default function RootLayout({

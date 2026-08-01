@@ -1,7 +1,7 @@
 import { LiveReveal } from "./components/LiveReveal";
 import { Logo } from "./components/Logo";
 import { Nav } from "./components/Nav";
-import { ToggleDemo } from "./components/ToggleDemo";
+import { PacketDemo } from "./components/PacketDemo";
 import {
   CardGrid,
   DetailSection,
@@ -11,99 +11,87 @@ import {
   SectionHead,
 } from "./components/ui";
 
-const INSFORGE_FEATURES = [
+const PIPELINE = [
   {
-    title: "Attribution engine",
-    badge: "Postgres fn",
-    body: "confirm_attributions() runs the whole temporal join inside InsForge — the core of the demo, executing where you can read it.",
+    n: "01",
+    t: "Trigger",
+    d: "A judge speaks an open prompt — “Status check on Daniel,” “What did Marcin ship this week.” Flexible phrasing on top, one narrow pipeline underneath.",
   },
   {
-    title: "Source-scoped views",
-    badge: "structural",
-    body: "Every read goes through visible_source_event / visible_ticket_state, gated on the run's enabled_sources. Disable Linear and the join has nothing left.",
+    n: "02",
+    t: "Ingest",
+    d: "Slack, Linear, GitHub, and the CRM get pulled into one normalized stream. Each record keeps who, what, when, and a permalink. No interpretation yet.",
   },
   {
-    title: "Classification cache",
-    badge: "content-hash",
-    body: "Keyed on message content, not message id. A live re-run after a source toggle re-costs nothing — the LLM never runs twice on the same text.",
+    n: "03",
+    t: "Cluster",
+    d: "A few dozen noisy events collapse into the five or six themes that actually mattered that window.",
   },
   {
-    title: "Row Level Security",
-    badge: "auth.uid()",
-    body: "An engineer sees their own findings, a manager sees direct reports, nobody sees the org. Enforced by policy, not by the UI's good behavior.",
+    n: "04",
+    t: "Map",
+    d: "Each theme gets 1–2 drafted sentences, every claim welded to the source record it came from.",
   },
   {
-    title: "Storage snapshots",
-    badge: "run-snapshots",
-    body: "Every run's raw pull can replay from a bucket — deterministic offline demo if the venue wifi or a rate limit gets in the way.",
-  },
-  {
-    title: "Realtime stage stream",
-    badge: "realtime.publish",
-    body: "run_stage_event rows publish to a per-run channel as the pipeline executes — resolve, harvest, classify, attribute, rank, report, live.",
+    n: "05",
+    t: "Render",
+    d: "The packet fills out. Every sentence is clickable back to the raw PR, ticket, message, or CRM note.",
   },
 ];
 
-const STACK = [
+const FEATURES = [
   {
-    name: "HydraDB",
-    role: "Cross-source identity resolution",
-    body: "Unifies a Slack handle, a GitHub login, and a Linear assignee into one person. Confirmation is impossible without knowing they're the same human — nothing else in the stack can produce this.",
+    title: "The firewall",
+    badge: "hard rule",
+    body: "No source link, no sentence. A drafted claim with nothing to cite never reaches the packet — checked in code, not left to a prompt instruction.",
   },
   {
-    name: "InsForge",
-    role: "The detector itself",
-    body: "The attribution engine, the degradation guarantee, the classification cache, access control, and run snapshots all live here — not a results table, the thing that decides what counts as proof.",
+    title: "One lane, on purpose",
+    badge: "scoped",
+    body: "Person + window + cited output. Ask it to rank, score, or compare, and it declines instead of guessing — out of scope is a feature, not a gap.",
   },
   {
-    name: "RocketRide Cloud",
-    role: "Orchestration and fan-out",
-    body: "The public endpoint, bounded-concurrency classification calls, per-message retry on malformed JSON, and stage checkpointing so a crashed run resumes instead of restarting.",
-  },
-  {
-    name: "Pipeshift",
-    role: "Message classification",
-    body: "Turns \"this message mentions ENG-412\" into \"this message unblocked someone on ENG-412.\" Rule (a) confirms the link; Pipeshift characterizes the help.",
+    title: "Gathers, doesn't judge",
+    badge: "no verdict",
+    body: "The agent assembles evidence. The human reads it and decides. Nothing in the response is scored, rated, or ranked — there's no number to screenshot into a review.",
   },
 ];
 
-const ROADMAP = [
-  "Embed harvested messages + tickets (pgvector)",
-  "Live stage stream on this page",
-  "Nightly scheduled run",
-  "Gmail attribution logic",
-  "Real reporting-structure RLS demo",
-  "Rule (b): PR/file attribution",
+const CUT = [
+  {
+    title: "The monthly voice check-in",
+    body: "Un-demoable on a monthly cadence — you can't compress a month into a 3-minute room. It was also the highest-variance thing in the entire pitch.",
+  },
+  {
+    title: "AI judgment on a person",
+    body: "An unscoreable output, and any judge would be right to be uncomfortable watching a model rate someone's performance out loud.",
+  },
 ];
 
 const FAQS = [
   {
-    q: "Isn't this just a database join?",
-    a: "Yes — that's the point. \"This message referenced a ticket, it's assigned to someone else, and it closed inside the window\" is a temporal join. Running it as a Postgres function inside InsForge, instead of application code, is what lets us prove the degradation instead of asking you to trust it.",
+    q: "What job does this actually kill?",
+    a: "A manager loses a full Sunday scrolling GitHub, Linear, and Slack to reconstruct what six people did, then reformatting it into HR's template. That's a chase job, a format job, and a copy-paste job happening at once. Every company over ~20 people pays a human to do this.",
   },
   {
-    q: "How do we know the source toggle above isn't faked?",
-    a: "Every read in the attribution path goes through a function gated on the run's enabled_sources — visible_ticket_state, visible_source_event. Disable Linear and the underlying rows are structurally absent from the query, not skipped by an if-statement. The function body is nine lines of SQL; we'll put it on screen.",
+    q: "Why doesn't it just answer anything I ask?",
+    a: "Because an agent that wanders outside its lane is the whole risk. Open prompt on the surface, one narrow pipeline underneath — person, window, cited output. Anything else, it says so instead of improvising. A graceful decline in front of a room reads as engineering; a hallucinated paragraph reads as a magic trick.",
   },
   {
-    q: "Doesn't this enable manager surveillance?",
-    a: "Access is enforced by Row Level Security, not a UI promise. An engineer sees their own findings; a manager sees direct reports; nobody sees the org-wide view. There is no query path that returns it — that's a database guarantee, not a feature flag someone could flip.",
+    q: "What stops it from making things up?",
+    a: "The firewall: no source link, no sentence. Every claim in a packet is welded to the record it was drafted from — a Slack permalink, a Linear ticket, a PR, a CRM note. If a drafted sentence has nothing to cite, it's dropped before it ever renders, not softened with a caveat.",
   },
   {
-    q: "Why doesn't the divergence score ever show up anywhere?",
-    a: "We promise cited findings, not a score — a person is not rankable below two confirmed attributions, so a new hire with two Slack messages can't top a list. The number exists as an internal sort key. It never reaches the response, because a visible score is exactly the kind of dashboard number this project is arguing against.",
+    q: "Isn't this just a scoring tool with extra steps?",
+    a: "No score ever appears, anywhere. The agent's whole job ends at “here's what happened, cited.” Ranking, rating, and comparing people is the one thing it's built to refuse — the human reading the packet is the one who judges, not the agent.",
   },
   {
-    q: "What happens if a workspace only has one connector?",
-    a: "The response includes a degraded block naming exactly which confirmation rules can't run and why, instead of silently returning fewer results. A tool that reports its own blind spot, not one that hides it.",
+    q: "Why cut the monthly check-in and the AI verdict?",
+    a: "Both were cut for the same reason a demo has to earn: they don't survive a live room. A monthly cadence can't be shown in three minutes, and a model rendering judgment on a named person is an output nobody can score — including the judges. The pipeline that's left is the part that's provably checkable on sight.",
   },
   {
-    q: "Does Gmail actually do anything yet?",
-    a: "Not yet. It stays in the source toggle so the degradation demo has a fourth lever, but no attribution logic reads from it. We'd rather say that plainly than pretend otherwise.",
-  },
-  {
-    q: "What makes the live re-run fast enough to demo?",
-    a: "Classification is cached by message content hash, not by run. Toggling sources and re-running only recomputes the attribution join — milliseconds, not a fresh LLM pass over every message in the window.",
+    q: "How do you prove it on stage?",
+    a: "You pick the person and the window, and ideally drop a curveball into the real Slack channel seconds before the run. Then a judge clicks one citation and lands on the actual pull request. That's the whole game in a one-shot run — checkable, not just claimed.",
   },
 ];
 
@@ -121,17 +109,16 @@ export default function Home() {
                 data-hero-reveal
                 className="font-display text-5xl leading-[1.08] sm:text-[58px]"
               >
-                Your engineering dashboard is{" "}
-                <span className="text-accent italic">lying to you.</span>
+                Stop reconstructing{" "}
+                <span className="text-accent italic">everyone&rsquo;s week</span> by hand.
               </h1>
               <p
                 data-hero-reveal
                 className="mt-6 max-w-lg text-[17px] leading-relaxed text-text/70"
               >
-                Engineers often unblock a teammate or catch a bug in review, but the person who
-                gets credit later is whoever closed the ticket. Witness finds that hidden work
-                and gives credit where it&rsquo;s due, confirming every finding against a
-                second, independent source before it counts.
+                Receipts answers a spoken question about someone&rsquo;s recent work by
+                assembling a cited evidence packet from Slack, Linear, GitHub, and your CRM
+                &mdash; never a verdict. The agent gathers. The human judges.
               </p>
               <div data-hero-reveal className="mt-8">
                 <div className="flex flex-wrap items-center gap-3">
@@ -162,20 +149,37 @@ export default function Home() {
         </div>
       </section>
 
+      {/* The job */}
+      <section data-reveal className="py-20">
+        <div className="mx-auto max-w-3xl px-6 text-center">
+          <Eyebrow>The job</Eyebrow>
+          <h2 className="mt-4 font-display text-4xl sm:text-[42px]">
+            A full Sunday, three times over.
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
+            Chase job: scroll four tools to find what someone actually did. Format job: turn
+            that into HR&rsquo;s template. Copy-paste job: do it again for the next five
+            people. Every company over ~20 engineers pays a human to run this loop &mdash;
+            that&rsquo;s the shared groan, not a hunch.
+          </p>
+        </div>
+      </section>
+
       {/* The proof — interactive */}
       <section id="proof" data-reveal className="px-6 py-24">
         <div className="mx-auto max-w-3xl text-center">
           <Eyebrow>The proof</Eyebrow>
           <h2 className="mt-4 font-display text-4xl sm:text-[42px]">
-            Scope it to one connector and watch it happen.
+            Ask it about someone. Watch it decline what it shouldn&rsquo;t answer.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-            This reproduces the real rule against the real seeded run: Maria referenced ENG-412
-            in Slack; ENG-412 is assigned to Chen; it closed 2h14m later. Turn Linear off.
+            This runs the real pipeline against a warm-cache workspace &mdash; Daniel, Marcin,
+            and Priya are real fixture people with real-shaped citations. Try a status check,
+            then try the curveball.
           </p>
         </div>
         <div className="mt-12">
-          <ToggleDemo />
+          <PacketDemo variant="compact" />
         </div>
       </section>
 
@@ -184,26 +188,10 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="max-w-xl">
             <Eyebrow>How it works</Eyebrow>
-            <h2 className="mt-4 font-display text-4xl">Harvest broadly. Query narrowly.</h2>
+            <h2 className="mt-4 font-display text-4xl">Open prompt on top. One narrow pipeline underneath.</h2>
           </div>
-          <div className="mt-12 grid gap-8 sm:grid-cols-3">
-            {[
-              {
-                n: "01",
-                t: "Harvest every source",
-                d: "HydraDB resolves identities and pulls Slack, GitHub, and Linear into one normalized ledger — regardless of what a later run restricts.",
-              },
-              {
-                n: "02",
-                t: "Confirm inside Postgres",
-                d: "confirm_attributions() joins the ledger against itself: who a ticket is really assigned to, and when it closed after the message that referenced it.",
-              },
-              {
-                n: "03",
-                t: "Report the blind spot too",
-                d: "Restrict the sources and the join loses rows to join against — not a branch that decided to hide them. The response says exactly what it can no longer see.",
-              },
-            ].map((step) => (
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
+            {PIPELINE.map((step) => (
               <div key={step.n} className="border-t border-border pt-5">
                 <span className="font-mono text-sm text-accent">{step.n}</span>
                 <h3 className="mt-2 font-medium text-text">{step.t}</h3>
@@ -214,21 +202,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* The actual rule */}
-      <section data-reveal className="py-10">
+      {/* The firewall */}
+      <section id="firewall" data-reveal className="py-10">
         <div className="mx-auto max-w-6xl px-6 text-center">
-          <h2 className="font-display text-3xl sm:text-4xl">Not a guess. A rule.</h2>
+          <h2 className="font-display text-3xl sm:text-4xl">No source link. No sentence.</h2>
           <p className="mx-auto mt-3 max-w-md text-[15px] text-muted">
-            Every finding has to clear the same three conditions. If a source is turned off,
-            one of them simply can&rsquo;t be checked anymore.
+            That&rsquo;s the whole rule. It&rsquo;s also what makes a one-shot demo checkable
+            on sight instead of taken on faith.
           </p>
 
           <div className="mx-auto mt-8 max-w-lg rounded-xl border border-border bg-surface p-6 text-left shadow-sm">
             <ol className="space-y-4">
               {[
-                "The message names a specific ticket.",
-                "That ticket is assigned to someone else.",
-                "It closed within the time window after the message.",
+                "A sentence gets drafted from a cluster of real events.",
+                "Every claim in it has to cite the specific record it came from.",
+                "No valid citation survives the check → the sentence is dropped before render, not softened.",
               ].map((step, i) => (
                 <li key={step} className="flex items-start gap-3">
                   <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[12px] font-semibold text-accent">
@@ -241,23 +229,23 @@ export default function Home() {
           </div>
 
           <p className="mx-auto mt-4 max-w-md text-sm text-muted">
-            All three, every time, no exceptions built in for the demo.
+            A judge clicks one of those links live. It lands on the actual PR or ticket.
           </p>
         </div>
       </section>
 
-      {/* InsForge feature grid */}
-      <section id="stack" data-reveal className="py-20">
+      {/* Feature grid */}
+      <section data-reveal className="py-20">
         <div className="mx-auto max-w-6xl px-6">
           <SectionHead
-            eyebrow="Built on InsForge"
-            sub="Not a results table at the end of the pipeline — the part of the system that carries the argument."
+            eyebrow="The guarantees"
+            sub="Three rules that keep an open-ended prompt from turning into a wandering agent."
           >
-            The database is the detector.
+            Narrow on purpose.
           </SectionHead>
           <div className="mt-10">
-            <CardGrid>
-              {INSFORGE_FEATURES.map((f) => (
+            <CardGrid columns={3}>
+              {FEATURES.map((f) => (
                 <FeatureCard key={f.title} title={f.title} badge={f.badge}>
                   {f.body}
                 </FeatureCard>
@@ -267,111 +255,84 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Alternating detail sections */}
+      {/* What got cut */}
       <DetailSection
-        eyebrow="Access control"
-        heading="Who sees what is a policy, not a promise."
+        eyebrow="What we cut, and why"
+        heading="Two ideas that don't survive a live room."
         visual={
-          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-muted uppercase">
-                  <th className="px-4 py-3 font-normal">Viewer</th>
-                  <th className="px-4 py-3 font-normal">Sees</th>
-                  <th className="px-4 py-3 font-normal">Enforced by</th>
-                </tr>
-              </thead>
-              <tbody className="text-[13px]">
-                {[
-                  ["Engineer", "Their own findings", "auth.uid()"],
-                  ["Manager", "Direct reports only", "reports_to()"],
-                  ["Anyone else", "Nothing", "no policy grants it"],
-                ].map((row) => (
-                  <tr key={row[0]} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 text-text">{row[0]}</td>
-                    <td className="px-4 py-3 text-muted">{row[1]}</td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-muted">{row[2]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-4">
+            {CUT.map((c) => (
+              <div key={c.title} className="rounded-xl border border-border bg-surface p-5">
+                <p className="text-[13px] font-medium text-text">{c.title}</p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{c.body}</p>
+              </div>
+            ))}
           </div>
         }
       >
         <p>
-          A tool that produces performance-review-adjacent claims about named people is one
-          prompt away from a surveillance product. The answer isn&rsquo;t a promise about our
-          UI — it&rsquo;s Row Level Security, enforced at the database, that a manager cannot
-          query around.
+          The original scope included a monthly voice check-in and letting the agent render
+          judgment on a person. Both got cut in the same pass, for the same reason: neither
+          one is checkable in a 3-minute demo.
+        </p>
+        <p>
+          What&rsquo;s left is the part that is &mdash; the agent gathers evidence, the human
+          judges it. That trade is the whole pitch, not a compromise on the way to it.
         </p>
       </DetailSection>
 
+      {/* Architecture */}
       <DetailSection
-        eyebrow="Ranking"
-        heading="Findings, not scores."
+        eyebrow="Architecture of the demo"
+        heading="Judges own the variable."
         reverse
         band
         visual={
           <div className="rounded-xl border border-border bg-surface p-6 font-mono text-sm">
-            <p className="text-muted">divergence = invisible / (visible + invisible)</p>
-            <p className="mt-3 text-text">
-              <span className="text-accent">WHERE</span> confirmed_count &gt;= 2
-            </p>
-            <p className="mt-3 text-muted">— never rendered in the API response —</p>
+            <p className="text-muted">1. Judge picks the person</p>
+            <p className="mt-2 text-muted">2. Judge picks the window</p>
+            <p className="mt-2 text-text">3. Judge drops a curveball in Slack, live</p>
+            <p className="mt-3 text-accent">— none of that is scripted by us —</p>
           </div>
         }
       >
         <ul className="space-y-2">
-          <li>— A new hire with two Slack messages and zero PRs can&rsquo;t top the list.</li>
-          <li>— divergence is a sort key computed for ranking, not a field in the response.</li>
-          <li>— The pitch says &ldquo;not a score.&rdquo; The schema makes that true.</li>
+          <li>
+            &mdash; Kills the &ldquo;of course it worked, it&rsquo;s your workspace&rdquo;
+            objection before it&rsquo;s asked.
+          </li>
+          <li>&mdash; Anything outside the person + window lane gets a graceful decline, live.</li>
+          <li>
+            &mdash; A decline reads as engineering. A hallucinated paragraph reads as a magic
+            trick &mdash; we&rsquo;d rather show the first one.
+          </li>
         </ul>
       </DetailSection>
 
-      {/* Sponsor stack */}
+      {/* The 3 minutes */}
       <section data-reveal className="py-20">
         <div className="mx-auto max-w-6xl px-6">
-          <SectionHead
-            eyebrow="The stack"
-            sub="Four sponsors, each carrying a piece no other one could."
-          >
-            Division of labor.
+          <SectionHead eyebrow="The 3 minutes" sub="The whole pitch, timed.">
+            0:00 to close.
           </SectionHead>
           <div className="mt-10 grid gap-4 sm:grid-cols-2">
-            {STACK.map((s) => (
-              <div key={s.name} className="rounded-xl border border-border bg-surface p-6">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="font-mono text-sm font-semibold text-text">{s.name}</h3>
-                  <span className="text-right text-xs text-accent">{s.role}</span>
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{s.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Roadmap */}
-      <section data-reveal className="py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Eyebrow>Roadmap</Eyebrow>
-          <h2 className="mt-4 font-display text-4xl">What&rsquo;s scaffolded, not wired.</h2>
-          <p className="mt-3 max-w-lg text-[15px] text-muted">
-            Honest about the gap: schema and functions exist for these; the pipeline code that
-            populates them doesn&rsquo;t, yet.
-          </p>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {ROADMAP.map((r) => (
-              <div
-                key={r}
-                className="flex items-center justify-between rounded-xl border border-dashed border-border p-5 text-muted"
-              >
-                <span className="text-sm">{r}</span>
-                <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[11px] tracking-wide uppercase">
-                  Next
-                </span>
-              </div>
-            ))}
+            <div className="rounded-xl border border-border bg-surface p-6">
+              <p className="font-mono text-xs tracking-wide text-accent uppercase">0:00 – 0:45</p>
+              <h3 className="mt-2 font-medium text-text">The job</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                How many hours a manager burns on review archaeology. Ask the room to raise a
+                hand if they&rsquo;ve watched it happen. That count, out loud, is the wedge
+                validation.
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-surface p-6">
+              <p className="font-mono text-xs tracking-wide text-accent uppercase">0:45 – 3:00</p>
+              <h3 className="mt-2 font-medium text-text">Hands off</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                A judge speaks the prompt. The packet renders. Then the moment that wins it: a
+                judge clicks a citation and lands on the actual pull request.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -392,13 +353,13 @@ export default function Home() {
       {/* Final CTA */}
       <section data-reveal className="bg-surface-2 py-24 text-center">
         <div className="mx-auto max-w-2xl px-6">
-          <Eyebrow>The claim</Eyebrow>
+          <Eyebrow>The rule</Eyebrow>
           <h2 className="mt-4 font-display text-4xl sm:text-5xl">
-            &ldquo;It becomes a confident, wrong performance review.&rdquo;
+            &ldquo;No source link, no sentence.&rdquo;
           </h2>
           <p className="mx-auto mt-6 max-w-md text-sm text-muted">
-            That sentence used to be something you had to take on faith. Scroll up — it isn&rsquo;t
-            anymore.
+            That&rsquo;s not a promise about the UI. It&rsquo;s a check in the pipeline. Scroll
+            up and try to get it to break its own rule.
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">
             <a
@@ -421,7 +382,7 @@ export default function Home() {
             <div>
               <Logo height={18} className="text-text" />
               <p className="mt-3 max-w-[22ch] text-sm text-muted">
-                Cited findings, confirmed against a second source. Never a score.
+                Cited evidence packets, assembled from an open prompt. Never a verdict.
               </p>
             </div>
             <div>
@@ -429,7 +390,7 @@ export default function Home() {
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
                   <a href="#proof" className="hover:text-text">
-                    The proof
+                    Try it
                   </a>
                 </li>
                 <li>
@@ -440,16 +401,11 @@ export default function Home() {
               </ul>
             </div>
             <div>
-              <p className="font-mono text-xs tracking-wide text-muted uppercase">Backend</p>
+              <p className="font-mono text-xs tracking-wide text-muted uppercase">The rules</p>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
-                  <a href="#stack" className="hover:text-text">
-                    InsForge features
-                  </a>
-                </li>
-                <li>
-                  <a href="#stack" className="hover:text-text">
-                    Sponsor stack
+                  <a href="#firewall" className="hover:text-text">
+                    The firewall
                   </a>
                 </li>
               </ul>
@@ -466,7 +422,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-12 flex flex-col-reverse items-center justify-between gap-4 border-t border-border pt-6 text-xs text-muted sm:flex-row">
-            <span>A hackathon project built on HydraDB, Pipeshift, RocketRide, and InsForge.</span>
+            <span>A hackathon project. The agent gathers. The human judges.</span>
           </div>
         </div>
       </footer>
