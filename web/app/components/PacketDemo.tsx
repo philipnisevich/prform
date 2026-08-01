@@ -557,35 +557,20 @@ function ResponseCard({ result }: { result: ApiResult }) {
     );
   }
 
+  // One conversational bubble, not a separate "profile card": the lead
+  // sentence talks, and every claim after it carries its own citation pills
+  // right where it's made — closed WIT-17, here are the WIT-17 links, no
+  // detour through a person-header block to get there.
   return (
-    <div className="space-y-3">
-      {result.lead && (
-        <div className="max-w-[92%] rounded-2xl rounded-tl-md border border-border bg-surface px-4 py-3 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.2)]">
-          <p className="text-[13px] leading-relaxed text-text">{result.lead}</p>
-        </div>
-      )}
-      <div className="w-full rounded-xl border border-border bg-surface p-5 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.2)] sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
-          <div>
-            <p className="text-[15px] font-medium text-text">{result.person}</p>
-            <p className="text-[11px] text-muted">
-              {result.windowLabel} · {result.ingestedCount} events seen, {result.noiseDropped} dropped as noise
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <SourceBadge live={result.live} />
-            <span className="rounded-full bg-surface-2 px-2.5 py-1 font-mono text-[10px] tracking-wide text-muted uppercase">
-              {result.usedModel ? "Model-drafted" : "Template-drafted"}
-            </span>
-          </div>
-        </div>
+    <div className="max-w-[92%] rounded-2xl rounded-tl-md border border-border bg-surface px-4 py-3.5 shadow-[0_10px_30px_-20px_rgba(0,0,0,0.2)]">
+      {result.lead && <p className="text-[13px] leading-relaxed text-text">{result.lead}</p>}
 
-        <div className="mt-4 space-y-5">
+      <div className={result.lead ? "mt-3 space-y-3" : "space-y-3"}>
         {result.sections.map((s) => (
           <div key={s.cluster}>
-            <p className="text-[12px] font-medium text-accent">{s.theme}</p>
-            <p className="mt-1 text-[14px] leading-relaxed text-text">{s.sentence}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <p className="text-[10px] font-medium text-accent">{s.theme}</p>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-text">{s.sentence}</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {s.citations.map((c) => (
                 <CitationChip key={c.id} citation={c} live={result.live} />
               ))}
@@ -594,9 +579,11 @@ function ResponseCard({ result }: { result: ApiResult }) {
         ))}
       </div>
 
-        <p className="mt-5 border-t border-border pt-3 text-[11px] text-muted">
-          No source link, no sentence — every line above traces to something clickable.
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2.5">
+        <p className="text-[10px] text-muted">
+          {result.person} · {result.windowLabel} · {result.ingestedCount} events seen
         </p>
+        <SourceBadge live={result.live} />
       </div>
     </div>
   );
