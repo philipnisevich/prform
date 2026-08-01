@@ -100,16 +100,6 @@ const RAW_EVENTS: RawEvent[] = [
   { id: "p13", personId: "priya", source: "linear", cluster: "noise", daysAgo: 22, summary: "Out-of-window ticket comment", url: "https://linear.app/acme/issue/ENG-201" },
 ];
 
-export function personByQuery(query: string): Person | null {
-  const q = query.toLowerCase();
-  return (
-    PEOPLE.find((p) => p.name.toLowerCase() === q) ??
-    PEOPLE.find((p) => q.includes(p.name.toLowerCase())) ??
-    PEOPLE.find((p) => q.includes(p.name.toLowerCase().split(" ")[0])) ??
-    null
-  );
-}
-
 export function eventsForPerson(personId: string): Array<Omit<RawEvent, "daysAgo"> & { ts: string }> {
   const now = Date.now();
   return RAW_EVENTS.filter((e) => e.personId === personId).map((e) => ({

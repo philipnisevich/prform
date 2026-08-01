@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Logo } from "../components/Logo";
 import { PacketDemo } from "../components/PacketDemo";
-import { WorkspaceDirectory } from "../components/WorkspaceDirectory";
 
 export default function DemoPage() {
   return (
@@ -29,8 +28,6 @@ export default function DemoPage() {
         <div className="mt-10">
           <PacketDemo variant="full" />
         </div>
-
-        <WorkspaceDirectory />
       </main>
     </div>
   );

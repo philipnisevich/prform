@@ -13,7 +13,7 @@
 // code, not as a prompt instruction the model could ignore.
 
 import { NextResponse } from "next/server";
-import { CLUSTER_LABELS, PEOPLE, eventsForPerson, personByQuery, type EventSource } from "./fixture";
+import { CLUSTER_LABELS, PEOPLE, eventsForPerson, type EventSource, type Person } from "./fixture";
 import { pullLiveWindow, liveConfigured, type LiveEvent, type LivePerson } from "@/lib/liveSources";
 
 export const runtime = "nodejs";
@@ -155,18 +155,39 @@ async function buildSections(
   return { sections, usedModel };
 }
 
+// Loose on purpose: a judge saying "ben" or "arsen" should still land on
+// "benjamin nisevich" or "Ars Ray". Exact/substring match first, then a
+// nickname pass — any query word of 3+ letters that's a prefix (either
+// direction) of a word in the person's name, picking whichever match
+// covers the most letters so short prefixes don't collide.
 function matchPerson<T extends { name: string }>(query: string, people: T[]): T | null {
   const q = query.toLowerCase();
-  return (
-    people.find((p) => p.name.toLowerCase() === q) ??
-    people.find((p) => q.includes(p.name.toLowerCase())) ??
-    people.find((p) => q.includes(p.name.toLowerCase().split(" ")[0])) ??
-    null
-  );
+  const exact = people.find((p) => p.name.toLowerCase() === q);
+  if (exact) return exact;
+  const contained = people.find((p) => q.includes(p.name.toLowerCase()));
+  if (contained) return contained;
+
+  const queryWords = q.split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  let best: T | null = null;
+  let bestScore = 0;
+  for (const p of people) {
+    for (const nameWord of p.name.toLowerCase().split(/\s+/)) {
+      for (const qw of queryWords) {
+        if (nameWord === qw || nameWord.startsWith(qw) || qw.startsWith(nameWord)) {
+          const score = Math.min(nameWord.length, qw.length);
+          if (score > bestScore) {
+            bestScore = score;
+            best = p;
+          }
+        }
+      }
+    }
+  }
+  return best;
 }
 
 async function runFixture(prompt: string, days: number, windowLabel: string) {
-  const person = personByQuery(prompt);
+  const person = matchPerson<Person>(prompt, PEOPLE);
   if (!person) {
     return {
       outOfScope: true,
